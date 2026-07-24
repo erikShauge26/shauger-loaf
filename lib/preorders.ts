@@ -1,9 +1,24 @@
 import { mkdir, readFile, writeFile } from 'fs/promises'
 import path from 'path'
-import { getDb, hasDatabase } from '@/lib/db'
-import { preorders, type NewPreorder, type Preorder } from '@/lib/db/schema'
+import { FieldValue } from 'firebase-admin/firestore'
+import { getAdminDb, isFirebaseAdminConfigured } from '@/lib/firebase-admin'
 
 const localFile = path.join(process.cwd(), 'data', 'preorders.json')
+const COLLECTION = 'preorders'
+
+export type Preorder = {
+  id: string
+  customerName: string
+  email: string
+  phone: string | null
+  productSlug: string
+  productName: string
+  quantity: number
+  pickupNote: string | null
+  notes: string | null
+  status: string
+  createdAt: string
+}
 
 export type PreorderInput = {
   customerName: string
@@ -14,6 +29,20 @@ export type PreorderInput = {
   quantity: number
   pickupNote?: string
   notes?: string
+}
+
+function toRecord(input: PreorderInput) {
+  return {
+    customerName: input.customerName.trim(),
+    email: input.email.trim().toLowerCase(),
+    phone: input.phone?.trim() || null,
+    productSlug: input.productSlug,
+    productName: input.productName,
+    quantity: input.quantity,
+    pickupNote: input.pickupNote?.trim() || null,
+    notes: input.notes?.trim() || null,
+    status: 'pending',
+  }
 }
 
 async function readLocal(): Promise<Preorder[]> {
@@ -31,37 +60,25 @@ async function writeLocal(rows: Preorder[]) {
 }
 
 export async function createPreorder(input: PreorderInput): Promise<Preorder> {
-  const values: NewPreorder = {
-    customerName: input.customerName.trim(),
-    email: input.email.trim().toLowerCase(),
-    phone: input.phone?.trim() || null,
-    productSlug: input.productSlug,
-    productName: input.productName,
-    quantity: input.quantity,
-    pickupNote: input.pickupNote?.trim() || null,
-    notes: input.notes?.trim() || null,
-    status: 'pending',
-  }
+  const values = toRecord(input)
 
-  if (hasDatabase()) {
-    const db = getDb()
-    const [row] = await db.insert(preorders).values(values).returning()
-    return row
+  if (isFirebaseAdminConfigured()) {
+    const ref = await getAdminDb().collection(COLLECTION).add({
+      ...values,
+      createdAt: FieldValue.serverTimestamp(),
+    })
+    return {
+      id: ref.id,
+      ...values,
+      createdAt: new Date().toISOString(),
+    }
   }
 
   const rows = await readLocal()
   const row: Preorder = {
-    id: rows.length ? Math.max(...rows.map((r) => r.id)) + 1 : 1,
-    customerName: values.customerName!,
-    email: values.email!,
-    phone: values.phone ?? null,
-    productSlug: values.productSlug!,
-    productName: values.productName!,
-    quantity: values.quantity ?? 1,
-    pickupNote: values.pickupNote ?? null,
-    notes: values.notes ?? null,
-    status: 'pending',
-    createdAt: new Date(),
+    id: `local-${Date.now()}`,
+    ...values,
+    createdAt: new Date().toISOString(),
   }
   rows.push(row)
   await writeLocal(rows)

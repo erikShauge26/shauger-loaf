@@ -51,7 +51,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       ok: true,
-      id: row.id,
+      id: String(row.id),
       message: 'Preorder received. We will confirm pickup details by email.',
     })
   } catch (error) {

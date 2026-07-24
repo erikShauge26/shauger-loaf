@@ -4,5 +4,7 @@ packages:
 allowBuilds:
   sharp: true
   msw: true
+  '@firebase/util': true
+  protobufjs: true
 
 minimumReleaseAge: 0
