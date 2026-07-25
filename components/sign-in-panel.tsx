@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { useAuth } from '@/components/auth-provider'
 import { Button } from '@/components/ui/button'
 
@@ -19,6 +19,16 @@ function authErrorMessage(error: unknown) {
     if (code === 'auth/unauthorized-domain') {
       return 'This domain is not allowed in Firebase Auth settings.'
     }
+    if (code === 'auth/popup-closed-by-user') {
+      return 'Google sign-in was closed before finishing.'
+    }
+    if (code === 'auth/popup-blocked') {
+      return 'Popup was blocked. Allow popups for this site and try again.'
+    }
+    if (code === 'auth/operation-not-allowed') {
+      return 'Google sign-in is not enabled in Firebase Auth.'
+    }
+    return `Sign-in failed (${code}).`
   }
   return 'Could not sign in. Please try again.'
 }
@@ -32,6 +42,9 @@ export function SignInPanel({
 }) {
   const {
     configured,
+    user,
+    authError,
+    clearAuthError,
     signInWithGoogle,
     signInWithEmail,
     createAccountWithEmail,
@@ -41,6 +54,14 @@ export function SignInPanel({
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    if (user) onSignedIn?.()
+  }, [user, onSignedIn])
+
+  useEffect(() => {
+    if (authError) setError(authError)
+  }, [authError])
 
   if (!configured) {
     return (
@@ -55,6 +76,7 @@ export function SignInPanel({
     e.preventDefault()
     setBusy(true)
     setError('')
+    clearAuthError()
     try {
       if (mode === 'signin') {
         await signInWithEmail(email.trim(), password)
@@ -81,7 +103,10 @@ export function SignInPanel({
         disabled={busy}
         onClick={() => {
           setBusy(true)
+          setError('')
+          clearAuthError()
           void signInWithGoogle()
+            .then(() => onSignedIn?.())
             .catch((err) => setError(authErrorMessage(err)))
             .finally(() => setBusy(false))
         }}
