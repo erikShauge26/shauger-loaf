@@ -12,12 +12,16 @@ import {
   GoogleAuthProvider,
   browserLocalPersistence,
   createUserWithEmailAndPassword,
+  getRedirectResult,
   onAuthStateChanged,
   setPersistence,
   signInWithEmailAndPassword,
   signInWithPopup,
+  signInWithRedirect,
   signOut,
+  type Auth,
   type User,
+  type UserCredential,
 } from 'firebase/auth'
 import {
   getClientAuth,
@@ -27,6 +31,7 @@ import {
 type AuthContextValue = {
   user: User | null
   loading: boolean
+  finishingGoogle: boolean
   configured: boolean
   authError: string
   signInWithGoogle: () => Promise<void>
@@ -38,6 +43,20 @@ type AuthContextValue = {
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
+
+let redirectResultPromise: Promise<UserCredential | null> | null = null
+
+function readRedirectResult(auth: Auth) {
+  if (!redirectResultPromise) {
+    redirectResultPromise = getRedirectResult(auth)
+      .then((result) => result)
+      .catch((error) => {
+        redirectResultPromise = null
+        throw error
+      })
+  }
+  return redirectResultPromise
+}
 
 function googleProvider() {
   const provider = new GoogleAuthProvider()
@@ -52,13 +71,13 @@ function toAuthMessage(error: unknown) {
       return 'This domain is not allowed in Firebase Auth settings.'
     }
     if (code === 'auth/popup-blocked') {
-      return 'Popup was blocked. Allow popups for localhost:3000 and try again.'
+      return 'Popup was blocked. Allow popups, or use the demo email login below.'
     }
     if (code === 'auth/popup-closed-by-user') {
       return 'Google sign-in was closed before finishing.'
     }
     if (code === 'auth/operation-not-allowed') {
-      return 'Google sign-in is not enabled in Firebase Auth.'
+      return 'That sign-in method is not enabled in Firebase Auth.'
     }
     if (code === 'auth/account-exists-with-different-credential') {
       return 'An account already exists with this email using a different sign-in method.'
@@ -72,6 +91,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const configured = isFirebaseClientConfigured()
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(configured)
+  const [finishingGoogle, setFinishingGoogle] = useState(false)
   const [authError, setAuthError] = useState('')
 
   useEffect(() => {
@@ -81,18 +101,58 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     const auth = getClientAuth()
+    let active = true
+
     void setPersistence(auth, browserLocalPersistence).catch(() => undefined)
 
-    return onAuthStateChanged(auth, (nextUser) => {
+    if (sessionStorage.getItem('authRedirectPending') === '1') {
+      setFinishingGoogle(true)
+    }
+
+    void readRedirectResult(auth)
+      .then((result) => {
+        if (!active) return
+        sessionStorage.removeItem('authRedirectPending')
+        if (result?.user) {
+          const nextPath = sessionStorage.getItem('authRedirectTo') || '/track'
+          sessionStorage.removeItem('authRedirectTo')
+          if (window.location.pathname !== nextPath) {
+            window.location.replace(nextPath)
+            return
+          }
+        }
+        setFinishingGoogle(false)
+      })
+      .catch((error) => {
+        if (!active) return
+        sessionStorage.removeItem('authRedirectPending')
+        setFinishingGoogle(false)
+        setAuthError(toAuthMessage(error))
+      })
+
+    const unsub = onAuthStateChanged(auth, (nextUser) => {
       setUser(nextUser)
       setLoading(false)
+      if (nextUser) setFinishingGoogle(false)
     })
+
+    // Don't leave the UI stuck on "…" if Auth hangs on a bad domain.
+    const timeout = window.setTimeout(() => {
+      if (active) setLoading(false)
+    }, 4000)
+
+    return () => {
+      active = false
+      window.clearTimeout(timeout)
+      unsub()
+    }
   }, [configured])
 
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
       loading,
+      finishingGoogle,
       configured,
       authError,
       clearAuthError() {
@@ -101,9 +161,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       async signInWithGoogle() {
         const auth = getClientAuth()
         setAuthError('')
-        // Popup + COOP header (see next.config.mjs). Redirect fails on Chrome
-        // because third-party storage between firebaseapp.com and localhost is blocked.
-        await signInWithPopup(auth, googleProvider())
+        const params = new URLSearchParams(window.location.search)
+        const next = params.get('next')
+        sessionStorage.setItem(
+          'authRedirectTo',
+          next ||
+            (window.location.pathname.startsWith('/login')
+              ? '/track'
+              : window.location.pathname),
+        )
+
+        try {
+          await signInWithPopup(auth, googleProvider())
+        } catch (error) {
+          const code =
+            typeof error === 'object' && error && 'code' in error
+              ? String((error as { code: string }).code)
+              : ''
+          // Same-origin /__/auth proxy makes redirect reliable when popup fails.
+          if (
+            code === 'auth/popup-blocked' ||
+            code === 'auth/popup-closed-by-user' ||
+            code === 'auth/cancelled-popup-request'
+          ) {
+            sessionStorage.setItem('authRedirectPending', '1')
+            await signInWithRedirect(auth, googleProvider())
+            return
+          }
+          throw error
+        }
       },
       async signInWithEmail(email, password) {
         setAuthError('')
@@ -121,7 +207,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return user.getIdToken()
       },
     }),
-    [user, loading, configured, authError],
+    [user, loading, finishingGoogle, configured, authError],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

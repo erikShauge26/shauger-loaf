@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from 'react'
 import { useAuth } from '@/components/auth-provider'
 import { Button } from '@/components/ui/button'
+import { DEMO_ACCOUNT } from '@/lib/demo-account'
 
 function authErrorMessage(error: unknown) {
   if (typeof error === 'object' && error && 'code' in error) {
@@ -23,10 +24,10 @@ function authErrorMessage(error: unknown) {
       return 'Google sign-in was closed before finishing.'
     }
     if (code === 'auth/popup-blocked') {
-      return 'Popup was blocked. Allow popups for this site and try again.'
+      return 'Popup was blocked. Use the demo login below, or allow popups.'
     }
     if (code === 'auth/operation-not-allowed') {
-      return 'Google sign-in is not enabled in Firebase Auth.'
+      return 'That sign-in method is not enabled in Firebase Auth.'
     }
     return `Sign-in failed (${code}).`
   }
@@ -42,6 +43,7 @@ export function SignInPanel({
 }) {
   const {
     configured,
+    finishingGoogle,
     authError,
     clearAuthError,
     signInWithGoogle,
@@ -65,6 +67,15 @@ export function SignInPanel({
     )
   }
 
+  if (finishingGoogle) {
+    return (
+      <div className="auth-panel">
+        <h2>Finishing Google sign-in…</h2>
+        <p>One moment while we bring you back into Shauger Loaf.</p>
+      </div>
+    )
+  }
+
   async function handleEmail(e: FormEvent) {
     e.preventDefault()
     setBusy(true)
@@ -84,10 +95,39 @@ export function SignInPanel({
     }
   }
 
+  async function handleDemo() {
+    setBusy(true)
+    setError('')
+    clearAuthError()
+    setEmail(DEMO_ACCOUNT.email)
+    setPassword(DEMO_ACCOUNT.password)
+    try {
+      await signInWithEmail(DEMO_ACCOUNT.email, DEMO_ACCOUNT.password)
+      onSignedIn?.()
+    } catch (err) {
+      setError(authErrorMessage(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <div className="auth-panel">
       <h2>{title}</h2>
       <p>Sign in to preorder and track pickup day.</p>
+
+      <Button
+        type="button"
+        variant="secondary"
+        size="lg"
+        disabled={busy}
+        onClick={() => void handleDemo()}
+      >
+        {busy ? 'Signing in…' : 'Use demo account'}
+      </Button>
+      <p className="optional">
+        Demo: {DEMO_ACCOUNT.email} / {DEMO_ACCOUNT.password}
+      </p>
 
       <Button
         type="button"
@@ -104,7 +144,7 @@ export function SignInPanel({
             .finally(() => setBusy(false))
         }}
       >
-        {busy ? 'Opening Google…' : 'Continue with Google'}
+        {busy ? 'Working…' : 'Continue with Google'}
       </Button>
 
       <p className="auth-or">or email</p>

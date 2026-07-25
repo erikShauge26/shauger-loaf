@@ -1,13 +1,13 @@
 import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app'
-import { getAuth } from 'firebase/auth'
+import { getAuth, type Auth } from 'firebase/auth'
 
-function readConfig() {
+function envConfig() {
   const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY
-  const authDomain = process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
   const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
   const appId = process.env.NEXT_PUBLIC_FIREBASE_APP_ID
+  const authDomain = process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
 
-  if (!apiKey || !authDomain || !projectId || !appId) return null
+  if (!apiKey || !projectId || !appId || !authDomain) return null
 
   return {
     apiKey,
@@ -20,17 +20,31 @@ function readConfig() {
 }
 
 export function isFirebaseClientConfigured() {
-  return Boolean(readConfig())
+  return Boolean(envConfig())
+}
+
+function clientAuthDomain(fallback: string) {
+  // Same-origin auth helper via next.config rewrite of /__/auth/*.
+  // Prefer http://localhost:3000 (not 127.0.0.1).
+  if (typeof window === 'undefined') return fallback
+  if (window.location.hostname === 'localhost') return window.location.host
+  return fallback
 }
 
 function getFirebaseApp(): FirebaseApp {
-  const config = readConfig()
-  if (!config) {
+  const base = envConfig()
+  if (!base) {
     throw new Error('Firebase client is not configured.')
   }
-  return getApps().length ? getApp() : initializeApp(config)
+
+  if (getApps().length) return getApp()
+
+  return initializeApp({
+    ...base,
+    authDomain: clientAuthDomain(base.authDomain),
+  })
 }
 
-export function getClientAuth() {
+export function getClientAuth(): Auth {
   return getAuth(getFirebaseApp())
 }

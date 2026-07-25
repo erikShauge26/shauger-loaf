@@ -6,7 +6,17 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  // Lets Firebase Google sign-in finish (popup handoff).
+  // Same-origin Firebase Auth helper (fixes Google redirect on Chrome).
+  async rewrites() {
+    return [
+      {
+        source: '/__/auth/:path*',
+        destination:
+          'https://shipping-buying-6955.firebaseapp.com/__/auth/:path*',
+      },
+    ]
+  },
+  // Lets Firebase Google popup finish its window.closed handoff.
   async headers() {
     return [
       {
