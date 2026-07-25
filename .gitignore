@@ -15,3 +15,5 @@ node_modules
 .next/
 .DS_Store
 data/preorders.json
+tsconfig.tsbuildinfo
+*.tsbuildinfo
