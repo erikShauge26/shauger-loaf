@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, type FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
 import { useAuth } from '@/components/auth-provider'
 import { Button } from '@/components/ui/button'
 
@@ -19,12 +19,6 @@ function authErrorMessage(error: unknown) {
     if (code === 'auth/unauthorized-domain') {
       return 'This domain is not allowed in Firebase Auth settings.'
     }
-    if (code === 'auth/popup-closed-by-user') {
-      return 'Google sign-in was closed before finishing.'
-    }
-    if (code === 'auth/popup-blocked') {
-      return 'Popup was blocked. Allow popups for this site and try again.'
-    }
     if (code === 'auth/operation-not-allowed') {
       return 'Google sign-in is not enabled in Firebase Auth.'
     }
@@ -42,7 +36,7 @@ export function SignInPanel({
 }) {
   const {
     configured,
-    user,
+    finishingGoogle,
     authError,
     clearAuthError,
     signInWithGoogle,
@@ -55,19 +49,22 @@ export function SignInPanel({
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
-  useEffect(() => {
-    if (user) onSignedIn?.()
-  }, [user, onSignedIn])
-
-  useEffect(() => {
-    if (authError) setError(authError)
-  }, [authError])
+  const shownError = error || authError
 
   if (!configured) {
     return (
       <div className="auth-panel">
         <h2>{title}</h2>
         <p>Firebase login is not configured yet.</p>
+      </div>
+    )
+  }
+
+  if (finishingGoogle) {
+    return (
+      <div className="auth-panel">
+        <h2>Finishing Google sign-in…</h2>
+        <p>One moment while we bring you back into Shauger Loaf.</p>
       </div>
     )
   }
@@ -106,12 +103,13 @@ export function SignInPanel({
           setError('')
           clearAuthError()
           void signInWithGoogle()
-            .then(() => onSignedIn?.())
-            .catch((err) => setError(authErrorMessage(err)))
-            .finally(() => setBusy(false))
+            .catch((err) => {
+              setError(authErrorMessage(err))
+              setBusy(false)
+            })
         }}
       >
-        Continue with Google
+        {busy ? 'Redirecting to Google…' : 'Continue with Google'}
       </Button>
 
       <p className="auth-or">or email</p>
@@ -138,7 +136,7 @@ export function SignInPanel({
             minLength={6}
           />
         </label>
-        {error ? <p className="form-error">{error}</p> : null}
+        {shownError ? <p className="form-error">{shownError}</p> : null}
         <Button type="submit" size="lg" disabled={busy}>
           {busy ? 'Working…' : mode === 'signin' ? 'Sign in' : 'Create account'}
         </Button>

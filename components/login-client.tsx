@@ -6,14 +6,16 @@ import { SignInPanel } from '@/components/sign-in-panel'
 import { useAuth } from '@/components/auth-provider'
 
 export function LoginClient() {
-  const { user, loading } = useAuth()
+  const { user, loading, finishingGoogle } = useAuth()
   const router = useRouter()
   const search = useSearchParams()
   const next = search.get('next') || '/track'
 
   useEffect(() => {
-    if (!loading && user) router.replace(next)
-  }, [loading, user, next, router])
+    if (!loading && !finishingGoogle && user) {
+      router.replace(next)
+    }
+  }, [loading, finishingGoogle, user, next, router])
 
   return (
     <SignInPanel

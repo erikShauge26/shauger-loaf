@@ -14,7 +14,6 @@ import {
   getRedirectResult,
   onAuthStateChanged,
   signInWithEmailAndPassword,
-  signInWithPopup,
   signInWithRedirect,
   signOut,
   type Auth,
@@ -29,6 +28,7 @@ import {
 type AuthContextValue = {
   user: User | null
   loading: boolean
+  finishingGoogle: boolean
   configured: boolean
   authError: string
   signInWithGoogle: () => Promise<void>
@@ -68,12 +68,6 @@ function toAuthMessage(error: unknown) {
     if (code === 'auth/unauthorized-domain') {
       return 'This domain is not allowed in Firebase Auth settings.'
     }
-    if (code === 'auth/popup-blocked') {
-      return 'Popup was blocked. Allow popups and try again.'
-    }
-    if (code === 'auth/popup-closed-by-user') {
-      return 'Google sign-in was closed before finishing.'
-    }
     if (code === 'auth/operation-not-allowed') {
       return 'Google sign-in is not enabled in Firebase Auth.'
     }
@@ -89,6 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const configured = isFirebaseClientConfigured()
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(configured)
+  const [finishingGoogle, setFinishingGoogle] = useState(false)
   const [authError, setAuthError] = useState('')
 
   useEffect(() => {
@@ -100,31 +95,54 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const auth = getClientAuth()
     let active = true
 
+    // Returning from Google redirect?
+    const maybeRedirect =
+      typeof window !== 'undefined' &&
+      (sessionStorage.getItem('authRedirectPending') === '1' ||
+        window.location.search.includes('apiKey='))
+
+    if (maybeRedirect) {
+      setFinishingGoogle(true)
+    }
+
     void readRedirectResult(auth)
       .then((result) => {
         if (!active) return
+        sessionStorage.removeItem('authRedirectPending')
         if (result?.user) {
-          const nextPath = sessionStorage.getItem('authRedirectTo')
+          const nextPath = sessionStorage.getItem('authRedirectTo') || '/track'
           sessionStorage.removeItem('authRedirectTo')
-          if (nextPath && window.location.pathname !== nextPath) {
-            window.location.assign(nextPath)
+          if (window.location.pathname + window.location.search !== nextPath) {
+            window.location.replace(nextPath)
+            return
           }
         }
+        setFinishingGoogle(false)
       })
       .catch((error) => {
-        if (active) setAuthError(toAuthMessage(error))
+        if (!active) return
+        sessionStorage.removeItem('authRedirectPending')
+        setFinishingGoogle(false)
+        setAuthError(toAuthMessage(error))
       })
 
-    return onAuthStateChanged(auth, (nextUser) => {
+    const unsub = onAuthStateChanged(auth, (nextUser) => {
       setUser(nextUser)
       setLoading(false)
+      if (nextUser) setFinishingGoogle(false)
     })
+
+    return () => {
+      active = false
+      unsub()
+    }
   }, [configured])
 
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
       loading,
+      finishingGoogle,
       configured,
       authError,
       clearAuthError() {
@@ -132,32 +150,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       async signInWithGoogle() {
         const auth = getClientAuth()
-        const provider = googleProvider()
         setAuthError('')
-
-        try {
-          // Popup is more reliable on localhost than redirect + Strict Mode.
-          await signInWithPopup(auth, provider)
-        } catch (error) {
-          const code =
-            typeof error === 'object' && error && 'code' in error
-              ? String((error as { code: string }).code)
-              : ''
-
-          if (
-            code === 'auth/popup-blocked' ||
-            code === 'auth/cancelled-popup-request'
-          ) {
-            sessionStorage.setItem(
-              'authRedirectTo',
-              `${window.location.pathname}${window.location.search}`,
-            )
-            await signInWithRedirect(auth, provider)
-            return
-          }
-
-          throw error
-        }
+        // Redirect avoids the blank white popup hang after Google Approve.
+        const params = new URLSearchParams(window.location.search)
+        const next = params.get('next')
+        const fallback =
+          window.location.pathname.startsWith('/login') ? '/track' : window.location.pathname
+        sessionStorage.setItem('authRedirectTo', next || fallback)
+        sessionStorage.setItem('authRedirectPending', '1')
+        await signInWithRedirect(auth, googleProvider())
       },
       async signInWithEmail(email, password) {
         setAuthError('')
@@ -175,7 +176,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return user.getIdToken()
       },
     }),
-    [user, loading, configured, authError],
+    [user, loading, finishingGoogle, configured, authError],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
