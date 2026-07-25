@@ -1,5 +1,7 @@
 {
   "projects": {
     "default": "shipping-buying-6955"
-  }
+  },
+  "targets": {},
+  "etags": {}
 }

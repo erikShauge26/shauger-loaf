@@ -1,12 +1,38 @@
 import { NextResponse } from 'next/server'
 import { getProduct } from '@/lib/products'
-import { createPreorder } from '@/lib/preorders'
+import {
+  createPreorder,
+  listAllPreorders,
+  listPreordersForUser,
+} from '@/lib/preorders'
+import { isBakeAdminEmail } from '@/lib/firebase-admin'
+import { verifyRequestAuth } from '@/lib/verify-request-auth'
+
+export async function GET(request: Request) {
+  const user = await verifyRequestAuth(request)
+  if (!user) {
+    return NextResponse.json({ error: 'Sign in required.' }, { status: 401 })
+  }
+
+  const admin = isBakeAdminEmail(user.email)
+  const scope = new URL(request.url).searchParams.get('scope')
+  const rows =
+    admin && scope === 'all'
+      ? await listAllPreorders()
+      : await listPreordersForUser(user.uid)
+
+  return NextResponse.json({ preorders: rows, admin })
+}
 
 export async function POST(request: Request) {
   try {
+    const user = await verifyRequestAuth(request)
+    if (!user?.email) {
+      return NextResponse.json({ error: 'Sign in required.' }, { status: 401 })
+    }
+
     const body = (await request.json()) as {
       customerName?: string
-      email?: string
       phone?: string
       productSlug?: string
       quantity?: number
@@ -14,16 +40,12 @@ export async function POST(request: Request) {
       notes?: string
     }
 
-    const customerName = body.customerName?.trim()
-    const email = body.email?.trim()
+    const customerName = body.customerName?.trim() || user.name || 'Customer'
     const productSlug = body.productSlug?.trim()
     const quantity = Number(body.quantity ?? 1)
 
-    if (!customerName || !email || !productSlug) {
-      return NextResponse.json(
-        { error: 'Name, email, and product are required.' },
-        { status: 400 },
-      )
+    if (!productSlug) {
+      return NextResponse.json({ error: 'Product is required.' }, { status: 400 })
     }
 
     if (!Number.isFinite(quantity) || quantity < 1 || quantity > 20) {
@@ -39,8 +61,9 @@ export async function POST(request: Request) {
     }
 
     const row = await createPreorder({
+      userId: user.uid,
       customerName,
-      email,
+      email: user.email,
       phone: body.phone,
       productSlug: product.slug,
       productName: product.name,
@@ -52,7 +75,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       ok: true,
       id: String(row.id),
-      message: 'Preorder received. We will confirm pickup details by email.',
+      message: 'Preorder received. Track it on the pickup day page.',
     })
   } catch (error) {
     console.error('preorder failed', error)

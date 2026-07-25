@@ -1,26 +1,53 @@
 'use client'
 
+import Link from 'next/link'
 import { useState } from 'react'
+import { useAuth } from '@/components/auth-provider'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { products } from '@/lib/products'
-import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 
 type Props = {
   defaultSlug?: string
 }
 
 export function PreorderForm({ defaultSlug }: Props) {
+  const { user, loading, getIdToken } = useAuth()
   const [status, setStatus] = useState<'idle' | 'loading' | 'done' | 'error'>(
     'idle',
   )
   const [message, setMessage] = useState('')
+  const [orderId, setOrderId] = useState('')
+
+  if (loading) {
+    return <p className="page-lead">Checking sign-in…</p>
+  }
+
+  if (!user) {
+    return (
+      <div className="form-success">
+        <h3>Sign in to preorder</h3>
+        <p>Preorders are tied to your account so you can track pickup day.</p>
+        <Link href="/login?next=/order" className={cn(buttonVariants({ size: 'lg' }))}>
+          Sign in
+        </Link>
+      </div>
+    )
+  }
 
   async function onSubmit(formData: FormData) {
     setStatus('loading')
     setMessage('')
 
+    const token = await getIdToken()
+    if (!token) {
+      setStatus('error')
+      setMessage('Please sign in again.')
+      return
+    }
+
     const payload = {
       customerName: String(formData.get('customerName') || ''),
-      email: String(formData.get('email') || ''),
       phone: String(formData.get('phone') || ''),
       productSlug: String(formData.get('productSlug') || ''),
       quantity: Number(formData.get('quantity') || 1),
@@ -31,15 +58,23 @@ export function PreorderForm({ defaultSlug }: Props) {
     try {
       const res = await fetch('/api/preorders', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify(payload),
       })
-      const data = (await res.json()) as { error?: string; message?: string }
+      const data = (await res.json()) as {
+        error?: string
+        message?: string
+        id?: string
+      }
       if (!res.ok) {
         setStatus('error')
         setMessage(data.error || 'Something went wrong.')
         return
       }
+      setOrderId(data.id || '')
       setStatus('done')
       setMessage(data.message || 'Preorder received.')
     } catch {
@@ -53,33 +88,37 @@ export function PreorderForm({ defaultSlug }: Props) {
       <div className="form-success" role="status">
         <h3>You are on the list</h3>
         <p>{message}</p>
-        <Button type="button" variant="outline" onClick={() => setStatus('idle')}>
-          Place another
-        </Button>
+        {orderId ? <p className="optional">Order {orderId}</p> : null}
+        <Link href="/track" className={cn(buttonVariants({ size: 'lg' }))}>
+          Track pickup day
+        </Link>
       </div>
     )
   }
 
   return (
-    <form
-      className="preorder-form"
-      action={onSubmit}
-    >
+    <form className="preorder-form" action={onSubmit}>
       <label>
         Name
-        <input name="customerName" required autoComplete="name" />
+        <input
+          name="customerName"
+          required
+          autoComplete="name"
+          defaultValue={user.displayName || ''}
+        />
       </label>
-      <label>
-        Email
-        <input name="email" type="email" required autoComplete="email" />
-      </label>
+      <p className="optional">Signed in as {user.email}</p>
       <label>
         Phone <span className="optional">(optional)</span>
         <input name="phone" type="tel" autoComplete="tel" />
       </label>
       <label>
         Loaf
-        <select name="productSlug" defaultValue={defaultSlug || products[0].slug} required>
+        <select
+          name="productSlug"
+          defaultValue={defaultSlug || products[0].slug}
+          required
+        >
           {products.map((p) => (
             <option key={p.slug} value={p.slug}>
               {p.name} — {p.priceLabel}
@@ -89,7 +128,14 @@ export function PreorderForm({ defaultSlug }: Props) {
       </label>
       <label>
         Quantity
-        <input name="quantity" type="number" min={1} max={20} defaultValue={1} required />
+        <input
+          name="quantity"
+          type="number"
+          min={1}
+          max={20}
+          defaultValue={1}
+          required
+        />
       </label>
       <label>
         Pickup note <span className="optional">(optional)</span>

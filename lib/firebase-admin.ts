@@ -1,4 +1,5 @@
 import { cert, getApps, initializeApp, type App } from 'firebase-admin/app'
+import { getAuth, type Auth } from 'firebase-admin/auth'
 import { getFirestore, type Firestore } from 'firebase-admin/firestore'
 
 function isAdminConfigured() {
@@ -31,6 +32,19 @@ export function getAdminDb(): Firestore {
   return getFirestore(getAdminApp())
 }
 
+export function getAdminAuth(): Auth {
+  return getAuth(getAdminApp())
+}
+
 export function isFirebaseAdminConfigured() {
   return isAdminConfigured()
+}
+
+export function isBakeAdminEmail(email?: string | null) {
+  if (!email) return false
+  const allow = (process.env.BAKE_ADMIN_EMAILS || '')
+    .split(',')
+    .map((v) => v.trim().toLowerCase())
+    .filter(Boolean)
+  return allow.includes(email.toLowerCase())
 }

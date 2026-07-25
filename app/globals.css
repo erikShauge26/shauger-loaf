@@ -366,6 +366,141 @@
   color: var(--muted-ink);
 }
 
+.nav-auth,
+.nav-auth-muted {
+  color: var(--olive-deep);
+  font-weight: 600;
+}
+
+.nav-auth-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.auth-panel {
+  max-width: 28rem;
+  display: grid;
+  gap: 1rem;
+}
+
+.auth-panel h2 {
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 2rem;
+  margin: 0;
+}
+
+.auth-or {
+  text-align: center;
+  color: var(--muted-ink);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin: 0;
+}
+
+.auth-switch {
+  background: none;
+  border: 0;
+  color: var(--olive);
+  text-align: left;
+  cursor: pointer;
+  padding: 0;
+  font: inherit;
+}
+
+.track-list {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.track-card {
+  padding: 1.25rem 0;
+  border-top: 1px solid rgba(31, 42, 36, 0.12);
+}
+
+.track-card h2 {
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 1.6rem;
+  margin: 0 0 0.35rem;
+}
+
+.track-card header p {
+  margin: 0 0 1rem;
+  color: var(--muted-ink);
+}
+
+.bake-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.bake-step {
+  display: flex;
+  gap: 0.9rem;
+}
+
+.bake-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 1.25rem;
+}
+
+.bake-dot {
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 999px;
+  border: 2px solid var(--border);
+  background: #fff;
+  margin-top: 0.2rem;
+}
+
+.bake-line {
+  width: 2px;
+  flex: 1;
+  min-height: 1.75rem;
+  background: var(--border);
+}
+
+.bake-step-complete .bake-dot,
+.bake-step-current .bake-dot {
+  border-color: var(--olive);
+  background: var(--olive);
+}
+
+.bake-step-complete .bake-line {
+  background: rgba(61, 90, 69, 0.45);
+}
+
+.bake-copy {
+  padding-bottom: 1.25rem;
+}
+
+.bake-label {
+  margin: 0;
+  font-weight: 600;
+}
+
+.bake-step-current .bake-label span {
+  color: var(--olive);
+  font-weight: 500;
+  font-size: 0.85rem;
+}
+
+.bake-detail,
+.bake-time {
+  margin: 0.25rem 0 0;
+  color: var(--muted-ink);
+  font-size: 0.95rem;
+}
+
+.bake-step-upcoming .bake-label,
+.bake-step-upcoming .bake-detail {
+  color: #8a968e;
+}
+
 @keyframes rise {
   from {
     opacity: 0;

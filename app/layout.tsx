@@ -1,6 +1,7 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
 import { DM_Sans, Instrument_Serif } from 'next/font/google'
+import { Providers } from '@/components/providers'
 import { SiteFooter } from '@/components/site-footer'
 import { SiteHeader } from '@/components/site-header'
 import { site } from '@/lib/site'
@@ -55,9 +56,11 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${sans.variable} ${display.variable} light`}>
       <body className="antialiased">
-        <SiteHeader />
-        {children}
-        <SiteFooter />
+        <Providers>
+          <SiteHeader />
+          {children}
+          <SiteFooter />
+        </Providers>
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>
